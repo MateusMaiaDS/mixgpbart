@@ -1,14 +1,14 @@
 # GP-function main
 gp_main <- function(x_train, y_train, x_star, tau, phi, nu, distance_matrix_train, get_cov_star = FALSE) {
-  
+
   # Getting the distance matrix from x_train and x_star
   distance_matrix_K_star <- distance_matrix(m1 = x_train, m2 = x_star)
   distance_matrix_K_star_star <- symm_distance_matrix(m1 = x_star)
-  
+
   # Getting the distance matrix from x_train and x_star (SPATIAL VALUES)
   # distance_matrix_K_star <- distance_matrix(m1 = x_train[,c("lat","lon")],m2 = x_star[,c("lat","lon")])
   # distance_matrix_K_star_star <- symm_distance_matrix(m1 = x_star[,c("lat","lon")])
-  
+
   # Calculating the K elements from the covariance structure
   n_train <- nrow(x_train)
   K_y <- PD_chol(kernel_function(squared_distance_matrix = distance_matrix_train,
@@ -17,7 +17,7 @@ gp_main <- function(x_train, y_train, x_star, tau, phi, nu, distance_matrix_trai
   K_diag <- is_diag_matrix(K_y)
   K_star <- kernel_function(squared_distance_matrix = distance_matrix_K_star,
                             nu = nu, phi = phi)
-  
+
   # Calculating \alpha
   # if(K_diag) {
   #   L <- diag(K_y)
@@ -27,20 +27,20 @@ gp_main <- function(x_train, y_train, x_star, tau, phi, nu, distance_matrix_trai
     alpha <- backsolve(L, backsolve(L, y_train, transpose = TRUE, k = n_train), k = n_train)
   # }
   mu_star <- crossprod(K_star, alpha)
-  
+
   # Here the abs is because the smallest values that are coming from here are due to numerical approximations.
   if(isTRUE(get_cov_star)) {
     K_star_star <- kernel_function(squared_distance_matrix = distance_matrix_K_star_star,
-                                   nu = nu, phi = phi) 
+                                   nu = nu, phi = phi)
     v <- if(K_diag) K_star/L else backsolve(L, K_star, transpose = TRUE, k = n_train)
     cov_star <- K_star_star - crossprod(v)
     # results <- list(mu_pred = mu_star, cov_pred = cov_star)
     results <- list(mu_pred = mu_star, cov_pred = cov_star)
-    
+
   } else {
     results <- list(mu_pred = mu_star)
   }
-  
+
   # ===============#
   return(results)
 }
@@ -49,11 +49,11 @@ gp_main <- function(x_train, y_train, x_star, tau, phi, nu, distance_matrix_trai
 gp_main_sample <- function(x_train, y_train, x_star, tau,
                            phi, nu, distance_matrix_train,
                            get_sample =  TRUE) {
-  
+
   # Getting the distance matrix from x_train and x_star
   distance_matrix_K_star <- distance_matrix(m1 = x_train, m2 = x_star)
   distance_matrix_K_star_star <- symm_distance_matrix(m1 = x_star)
-  
+
   # Calculating the K elements from the covariance structure
   n_train <- nrow(x_train)
   K_y <- kernel_function(squared_distance_matrix = distance_matrix_train,
@@ -62,7 +62,7 @@ gp_main_sample <- function(x_train, y_train, x_star, tau,
   K_diag <- is_diag_matrix(K_y)
   K_star <- kernel_function(squared_distance_matrix = distance_matrix_K_star,
                             nu = nu, phi = phi)
-  
+
   # Calculating \alpha
   if(K_diag) {
     L <- diag(K_y)
@@ -72,23 +72,23 @@ gp_main_sample <- function(x_train, y_train, x_star, tau,
     alpha <- backsolve(L, backsolve(L, y_train, transpose = TRUE, k = n_train), k = n_train)
   }
   mu_star <- crossprod(K_star, alpha)
-  
+
   # Here the abs is because the smallest values that are coming from here are due to numerical approximations.
   if(isTRUE(get_sample)) {
     K_star_star <- kernel_function(squared_distance_matrix = distance_matrix_K_star_star,
-                                   nu = nu, phi = phi) 
+                                   nu = nu, phi = phi)
     v <- if(K_diag) K_star/L else backsolve(L, K_star, transpose = TRUE, k = n_train)
     cov_star <- K_star_star - crossprod(v)
-    
+
     residuals_sample <- rMVN_var(mean = mu_star,Sigma = cov_star)
-    
+
     # results <- list(mu_pred = residuals_sample, cov_pred = cov_star)
     results <- list(mu_pred = unlist(residuals_sample))
-    
+
   } else {
     results <- list(mu_pred = mu_star)
   }
-  
+
   # ===============#
   return(results)
 }
@@ -98,12 +98,12 @@ gp_main_sample <- function(x_train, y_train, x_star, tau,
 gp_main_slow <- function(x_train, y_train, x_star, tau,
                            phi, nu, distance_matrix_train,
                            get_sample =  FALSE) {
-  
-  
+
+
   # Getting the distance matrix from x_train and x_star
   distance_matrix_K_star <- distance_matrix(m1 = x_train, m2 = x_star)
   distance_matrix_K_star_star <- symm_distance_matrix(m1 = x_star)
-  
+
   # Calculating the K elements from the covariance structure
   n_train <- nrow(x_train)
   if(tau < 1e13){
@@ -113,12 +113,12 @@ gp_main_slow <- function(x_train, y_train, x_star, tau,
   } else {
     K_y <- PD_chol(kernel_function(squared_distance_matrix = distance_matrix_train,
                            nu = nu,
-                           phi = phi)) + diag(x = 1/(tau), nrow = n_train) 
+                           phi = phi)) + diag(x = 1/(tau), nrow = n_train)
   }
   K_diag <- is_diag_matrix(K_y)
   K_star <- kernel_function(squared_distance_matrix = distance_matrix_K_star,
                             nu = nu, phi = phi)
-  
+
   # Calculating \alpha
   if(K_diag) {
     L <- diag(K_y)
@@ -128,39 +128,89 @@ gp_main_slow <- function(x_train, y_train, x_star, tau,
     alpha <- backsolve(L, backsolve(L, y_train, transpose = TRUE, k = n_train), k = n_train)
   }
   mu_star <- crossprod(K_star, alpha)
-  
+
   # this line is fucking up everything
   # mu_star <- matrix(mu_star,nrow = n_train)
   # print(mu_star[1:5])
-  
+
   # Here the abs is because the smallest values that are coming from here are due to numerical approximations.
   if(isTRUE(get_sample)) {
-    
+
     K_star_star <- kernel_function(squared_distance_matrix = distance_matrix_K_star_star,
                                    nu = nu, phi = phi)
-    
+
     cov_star <- K_star_star - crossprod(K_star,solve(K_y,K_star))
 
     residuals_sample <- rMVN_var(mean = mu_star,Sigma = cov_star)
-    
+
     results <- list(mu_pred = unlist(residuals_sample))
-    
+
   } else {
     results <- list(mu_pred = mu_star)
   }
-  
+
   # ===============#
   return(results)
 }
 
+gp_main_mix <- function(res_vec,
+                        omega,
+                        kappa,
+                        tau,
+                        nu,
+                        phi,
+                        tau_mu){
+
+  # Calculating the mean for the the training
+  train_mean_mvn <- crossprod(((1-kappa)*omega+kappa*matrix(1/tau_mu,nrow = nrow(omega),ncol = ncol(omega))),
+                              solve(((1-kappa)*omega+kappa*matrix(1/tau_mu,nrow = nrow(omega),ncol = ncol(omega))+diag(1/tau,nrow = nrow(omega),ncol = ncol(omega))),matrix(res_vec,nrow = ncol(omega))))
+
+
+  train_var_mvn <- (1-kappa)*omega+kappa*matrix(1/tau_mu,nrow = nrow(omega),ncol = ncol(omega)) -
+                    crossprod((1-kappa)*omega+kappa*matrix(1/tau_mu,nrow = nrow(omega),ncol = ncol(omega)),
+                              solve((1-kappa)*omega+kappa*matrix(1/tau_mu,nrow = nrow(omega),ncol = ncol(omega))+diag(1/tau,nrow = nrow(omega),ncol = ncol(omega)),
+                                    (1-kappa)*omega+kappa*matrix(1/tau_mu,nrow = nrow(omega),ncol = ncol(omega))))
+
+  omega_star <- kernel_function(squared_distance_matrix = distance_matrix(m1 = x_train,m2 = x_test),
+                             nu = nu,phi = phi)
+  # Sampling the training value
+  train_sample <- rMVN_var(mean =  train_mean_mvn,Sigma = train_var_mvn)
+
+  return(train_sample)
+
+}
+
+simple_gp <- function(x_train,
+                      x_test,
+                      train_sample,
+                      nu,
+                      phi){
+
+  # Getting the mean for new observations
+  omega <-  kernel_function(symm_distance_matrix(m1 = x_train),
+                            nu = nu,phi = phi)
+
+  omega_new <- kernel_function(squared_distance_matrix = distance_matrix(m1 = x_train,m2 = x_test),
+                               nu = nu,phi = phi)
+  # omega_new <- omega_new + matrix(1/tau_mu,nrow = nrow(omega_new), ncol = ncol(omega_new))
+
+  L <- PD_chol(omega)
+  # alpha <- backsolve(L, backsolve(L, matrix(train_sample,nrow = nrow(x_train)), transpose = TRUE, k = nrow(x_train)), k = nrow(x_train))
+  alpha <- backsolve(L, backsolve(L, train_sample, transpose = TRUE, k = nrow(x_train)), k = nrow(x_train))
+
+  # print(omega_new)
+  mu_star <- crossprod(omega_new,solve(omega+diag(1e-9,nrow = nrow(omega)),train_sample))
+
+  return(mu_star)
+}
 
 # Function to create the the function K that will be used
 # in a Gaussian process (Andrew's Version)
 kernel_function <- function(squared_distance_matrix, nu, phi) {
-  
+
   # Calculating the square matrix
   kernel_matrix <- (exp(-squared_distance_matrix / (2 * phi^2))) / nu
-  
+
   # Case nu = 0
   if(nu == 0 || nu > 1e13){
     kernel_matrix <- matrix(0, nrow = dim(squared_distance_matrix)[1],
