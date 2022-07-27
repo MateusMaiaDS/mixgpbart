@@ -1,6 +1,7 @@
 ## GP-Bart
 #' @useDynLib mixgpbart
 #' @importFrom Rcpp sourceCpp
+#' @importFrom Rcpp RcppEigen
 # ==================================#
 # Objects to test the tree_complete_conditional function
 # ==================================#
@@ -27,10 +28,11 @@ tree_complete_conditional_gpbart <- function(tree, residuals,
 
   log_likedensity <- mapply(residuals_terminal_nodes,
                             terminal_nodes, FUN = function(res,node){
-    mvtnorm::dmvnorm(x = res,mean = rep(0,length(res)),
+    mvnfast::dmvn(X = res,
+                          mu = matrix(0, nrow = length(res)),
                      sigma = (1-kappa)*node$Omega_matrix+
                              diag(1/tau,nrow = nrow(node$Omega_matrix))+
-                             (kappa)*matrix(1/tau_mu,nrow = nrow(node$Omega_matrix),ncol = ncol(node$Omega_matrix)))
+                             kappa/tau_mu)
   })
 
 
@@ -59,11 +61,11 @@ update_residuals <- function(tree,
   })
 
 
-  train_residuals_sample <- mapply(terminal_nodes,
+  residuals_sample <- mapply(terminal_nodes,
                                    residuals_terminal_nodes,
                                    FUN = function(node,resid_val)
                                    {gp_main_mix(x_train = x_train[node$train_observations_index,,drop = FALSE],
-                                                x_test = x_train[node$train_observations_index,,drop = FALSE],
+                                                x_test = x_test[node$test_observations_index,,drop = FALSE],
                                                 omega = node$Omega_matrix,
                                                 res_vec = resid_val,
                                                 phi = phi,
@@ -72,19 +74,11 @@ update_residuals <- function(tree,
                                                 tau_mu = tau_mu,
                                                 kappa = kappa)},SIMPLIFY = FALSE)
 
-  test_residuals_sample <- mapply(terminal_nodes,
-                                  train_residuals_sample,
-                                  FUN = function(node,resid_val)
-                                  {simple_gp(x_train = x_train[node$train_observations_index,,drop = FALSE],
-                                             x_test = x_test[node$test_observations_index,,drop = FALSE],
-                                             train_sample = resid_val,
-                                             phi = 1,nu = 1)},SIMPLIFY = FALSE)
-
   # Adding the mu values calculated
   for(i in seq_along(terminal_nodes)) {
     # Saving g
-    residuals_train_new[terminal_nodes[[i]]$train_observations_index] <- train_residuals_sample[[i]]
-    residuals_test_new[terminal_nodes[[i]]$test_observations_index] <- test_residuals_sample[[i]]
+    residuals_train_new[terminal_nodes[[i]]$train_observations_index] <- residuals_sample[[i]]$train_sample
+    residuals_test_new[terminal_nodes[[i]]$test_observations_index] <- residuals_sample[[i]]$test_sample
 
   }
   return(list(residuals_train = residuals_train_new,
@@ -1081,21 +1075,8 @@ inverse_omega_plus_I <- function(tree,
   # Checking if diagonal
   is_Omega_diag <- lapply(Omega_matrix, is_diag_matrix)
 
-  # Calculating Omega_plus_I*tau^(-1)
-  Omega_matrix_plus_I <- mapply(Omega_matrix, FUN = function(omega) {
-    (1-kappa)*omega + diag(1/(tau), nrow = nrow(omega)) + matrix(1/tau_mu,nrow = nrow(omega), ncol = ncol(omega))
-  }, SIMPLIFY = FALSE)
-
-  # Calculating Omega matrix plus I INVERSE
-  Omega_matrix_plus_I_INV <- mapply(Omega_matrix_plus_I, FUN = function(omega_plus_I_tau) { # p is the shrinkage factor
-    chol2inv(PD_chol(omega_plus_I_tau))
-  }, SIMPLIFY = FALSE)
-
   # Adding the Omega_matrix_plus_I_Inv
   for(i in seq_along(names_terminal_nodes)) {
-    tree[[names_terminal_nodes[i]]]$Omega_plus_I_tau <- Omega_matrix_plus_I[[names_terminal_nodes[i]]]
-    tree[[names_terminal_nodes[i]]]$Omega_plus_I_inv <- Omega_matrix_plus_I_INV[[names_terminal_nodes[i]]]
-    tree[[names_terminal_nodes[i]]]$distance_matrix <- distance_matrices[[names_terminal_nodes[i]]]
     tree[[names_terminal_nodes[i]]]$Omega_matrix <- Omega_matrix[[names_terminal_nodes[i]]]
     tree[[names_terminal_nodes[i]]]$is_Omega_diag <- is_Omega_diag[[names_terminal_nodes[i]]]
   }
@@ -1110,9 +1091,6 @@ remove_omega_plus_I_inv <- function(current_tree_iter) {
   names_terminal_nodes <- names(current_tree_iter)
 
   for(i in names_terminal_nodes) {
-    current_tree_iter[[i]]$Omega_plus_I_inv <-
-      current_tree_iter[[i]]$distance_matrix <-
-      current_tree_iter[[i]]$Omega_plus_I_tau <-
       current_tree_iter[[i]]$Omega_matrix <-
       current_tree_iter[[i]]$is_Omega_diag <- NULL
   }
