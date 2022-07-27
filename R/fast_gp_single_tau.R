@@ -153,7 +153,9 @@ gp_main_slow <- function(x_train, y_train, x_star, tau,
   return(results)
 }
 
-gp_main_mix <- function(res_vec,
+gp_main_mix <- function(x_train,
+                        x_test,
+                        res_vec,
                         omega,
                         kappa,
                         tau,
